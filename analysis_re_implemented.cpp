@@ -6,6 +6,9 @@
 
 //LOG
 //June 27th		re-implementation: fixing memory-alloc errors
+//June 28th		events in clusters, edges in cluster
+
+
 
 #include <iostream>
 #include <fstream>
@@ -13,161 +16,7 @@
 #include <cmath>
 #include <vector>
 #include <iomanip>
-
-struct NODE
-{
-	public:
-
-	NODE()
-	{
-		ID = 0;
-		is_active = 0;
-		n_follower = 0;
-		n_following = 0;
-		activations = 0;
-		intertime = 0;
-	}
-
-	NODE(int node_ID)
-	{
-		ID = node_ID;
-	}
-
-	~NODE()
-	{
-
-	}
-
-	int ID;
-	int clusterID;
-	int n_follower;
-	int n_following;
-	int is_active;
-	int activations;
-	float intertime;
-	std::vector<NODE*> follower;
-	std::vector<NODE*> following;	
-};
-
-struct EVENT
-{
-	public:
-
-	EVENT()
-	{
-		type = 0;
-	}
-
-	EVENT(int t, int time)
-	{
-		type = t;
-		timestamp = time;
-	}
-
-	~EVENT()
-	{
-	}
-
-	int type;
-	int timestamp;
-	int ID;
-
-	NODE* active_user;
-	NODE* passive_user;
-	EVENT* previous;
-	EVENT* next;
-};
-
-struct CLUSTER
-{
-	public: 
-
-	CLUSTER(int cluster)
-	{
-		ID = cluster;
-		n_active_users = 0;
-		average_intertime = 0;
-		average_activity = 0;
-		n_total_events =0;
-
-		for(int i=0; i<3; i++)
-		{
-			n_events_within[i] = 0;
-			n_events_ingoing[i] = 0;
-			n_events_outgoing[i] = 0;
-			n_total_events_by_type[i] = 0;
-			n_edges[i] = 0;
-		}
-	}
-	
-	~CLUSTER()
-	{
-
-	}
-
-	//Functions declaration
-	void find_active_users();
-	void compute_intertime();
-	void compute_activity();
-
-	int ID;
-	int size;
-
-	int n_active_users;
-	int n_events_within[3];
-	int n_events_ingoing[3];
-	int n_events_outgoing[3];
-	int n_total_events_by_type[3];
-	int n_total_events;
-	int n_edges[3]; //1 - within, 2 - ingoing, 3 - outgoing
-
-	float average_intertime;
-	float average_activity;
-
-	std::vector<NODE*> nodes_in_cluster;
-	std::vector<EVENT*> events_within;
-	std::vector<EVENT*> events_ingoing;
-	std::vector<EVENT*> events_outgoing;
-
-};
-
-
-void CLUSTER::find_active_users()
-{
-	for(int i=0; i<size; i++)
-	{
-		if(nodes_in_cluster[i]->is_active)
-		{
-			n_active_users++;
-		}
-	}
-}
-
-void CLUSTER::compute_activity()
-{
-	for(int i=0; i<size; i++)
-	{
-		if(nodes_in_cluster[i]->is_active)
-		{
-			average_activity+= nodes_in_cluster[i]->activations;
-		}
-	}
-	average_activity = (float) average_activity / size;
-}
-
-void CLUSTER::compute_intertime()
-{
-	for(int i=0; i<size; i++)
-	{
-		if(nodes_in_cluster[i]->activations > 1)
-		{
-			average_intertime+= nodes_in_cluster[i]->intertime;
-		}
-	}
-	average_intertime = (float) average_intertime / size;
-}
-
-
+#include "higgs_analysis_tools.h"
 
 
 int main(int argc, char** argv)
@@ -236,7 +85,7 @@ int main(int argc, char** argv)
 			not_matching++;
 		}
 	}
-	std::cout<<"NOT MATCHING CLUSTERS: "<<not_matching<<std::endl;
+	std::cerr<<"NOT MATCHING CLUSTERS: "<<not_matching<<std::endl;
 
 	//READ NODE in CLUSTER
 	input.open("node_clusters.txt");
@@ -266,7 +115,9 @@ int main(int argc, char** argv)
 		interaction.active_user = &nodes[user1];
 		interaction.passive_user = &nodes[user2];
 		events.push_back(interaction);
+		nodes[user1].active_in_event.push_back(&events[n_events]);
 		n_events++;
+		nodes[user1].is_active = 1;
 	}
 
 	for(int i=0; i<n_events; i++)
@@ -334,6 +185,49 @@ int main(int argc, char** argv)
 			}
 		}
 	}
+
+	for(int i=1; i<n_nodes+1; i++)
+	{
+		for(int j=0; j<nodes[i].n_following; j++)
+		{
+			if(nodes[i].clusterID == nodes[i].following[j]->clusterID)
+			{
+				//edges within
+				clusters[nodes[i].clusterID].n_edges[0]++; 
+			}
+			else
+			{
+				//edges outgoing
+				clusters[nodes[i].clusterID].n_edges[2]++; 
+				//edges ingoing
+				clusters[nodes[i].following[j]->clusterID].n_edges[1]++; 
+			}
+		}
+	}
+
+	//COMPUTE ACTIVITY and INTERTIME
+	for(int i=1; i<n_nodes+1; i++)
+	{
+		nodes[i].compute_activations();
+		nodes[i].compute_intertime();
+	}
+
+	//COMPUTE ACTIVE USERS, INTERTIME AND AVERAGE ACTIVATION
+	for(int i=0; i<n_clusters; i++)
+	{
+		clusters[i].find_active_users();
+		clusters[i].compute_activity();
+		clusters[i].compute_intertime();
+	}
+
+	for(int i=0; i<n_clusters; i++)
+	{
+		if(clusters[i].size > 10)
+		{
+			std::cout<<clusters[i].size <<" "<< clusters[i].average_intertime<<std::endl;;
+		}
+	}
+
 
 
 
