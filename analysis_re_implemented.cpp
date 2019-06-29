@@ -2,12 +2,12 @@
 //Dept. of Physics
 //University of Milan
 //Project: Networks and Complex Structures
-//Latest working build: June 27th 2019
+//Latest working build: June 29th 2019
 
 //LOG
 //June 27th		re-implementation: fixing memory-alloc errors
 //June 28th		events in clusters, edges in cluster
-
+//June 29th 	implemented print_n_events() function (see tools.h)
 
 
 #include <iostream>
@@ -220,13 +220,10 @@ int main(int argc, char** argv)
 		clusters[i].compute_intertime();
 	}
 
-	for(int i=0; i<n_clusters; i++)
-	{
-		if(clusters[i].size > 10)
-		{
-			std::cout<<clusters[i].size <<" "<< clusters[i].average_intertime<<std::endl;;
-		}
-	}
+	//PRINT 0-within, 1-ingoing, 2-outgoing, 0-retweet, 1-mentions, 2-replies
+	output.open("TEST.txt");
+	print_n_events(0, 0, clusters, 1, output);
+	output.close();
 
 
 

@@ -120,6 +120,8 @@ struct CLUSTER
 	void compute_intertime();
 	void compute_activity();
 
+	//output function
+
 	int ID;
 	int size;
 
@@ -178,6 +180,7 @@ void CLUSTER::compute_intertime()
 	average_intertime = (float) average_intertime / size;
 }
 
+
 void NODE::compute_intertime()
 {
 	if(activations>1)
@@ -195,6 +198,52 @@ void NODE::compute_activations()
 {
 	activations = active_in_event.size();
 }
+
+inline int normalize(int normalized, int active_nodes)
+{
+	if(normalized)
+	{
+		return active_nodes;
+	}
+	else
+	{
+		return 1;
+	}
+}
+
+void print_n_events(int type_1, int type_2, std::vector<CLUSTER>& clusters, int normalized, std::ofstream& output)
+{
+	if(type_1 == 0) //within
+	{
+		for(int i=0; i<clusters.size(); i++)
+		{
+			output<< clusters[i].size << " " << (double) clusters[i].n_events_within[type_2]/normalize(normalized, clusters[i].n_active_users) <<std::endl;
+		}
+	}
+	else if(type_1 == 1) //ingoing
+	{
+		for(int i=0; i<clusters.size(); i++)
+		{
+			output<< clusters[i].size << " " << (double) clusters[i].n_events_ingoing[type_2]/normalize(normalized, clusters[i].n_active_users) <<std::endl;
+		}
+	}
+	else if(type_1 == 2) //outgoing
+	{
+		for(int i=0; i<clusters.size(); i++)
+		{
+			output<< clusters[i].size << " " << (double) clusters[i].n_events_outgoing[type_2]/normalize(normalized, clusters[i].n_active_users) <<std::endl;
+		}
+	}
+	else
+	{
+		std::cerr<<"Error: non-existent event type"<<std::endl;
+	}
+}
+
+
+
+
+
 
 
 #endif //TOOLS_FOR_ACTIVITY_PATTERN_ANALYSIS
