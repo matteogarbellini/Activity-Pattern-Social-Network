@@ -2,14 +2,12 @@
 //Dept. of Physics
 //University of Milan
 //Project: Networks and Complex Structures
-//Latest working build: May 30th 2019
+//Latest working build: June 29th 2019
 
 //LOG
-//May 29th		first implementation
-//May 30th 		implemented: events within cluster, edges within cluster, edges ingoing/outgoing cluster
-//Jun 13th		fixing segmentation fault error in structs
-//Jun 15th 		spike trains: local variation implementation
-
+//June 27th		re-implementation: fixing memory-alloc errors
+//June 28th		events in clusters, edges in cluster
+//June 29th 	implemented print_n_events() function (see tools.h)
 
 
 #include <iostream>
@@ -18,451 +16,384 @@
 #include <cmath>
 #include <vector>
 #include <iomanip>
-
-struct EVENT;
-struct NODE
-{
-
-	NODE(int ID)
-	{
-		node_ID = ID;
-		is_active=0;
-		intertime=0;
-		n_activations=0;
-	}
-
-	int node_ID;
-	int n_followers;
-	std::vector<NODE*> follower;
-	std::vector<NODE*> following;
-	int n_following;
-	int cluster_ID;
-	int is_active;
-	float intertime;
-	int n_activations;
-	
-};
-
-struct EVENT
-{
-	EVENT(int t, int time)
-	{
-		type = t;
-		timestamp = time;
-	}
-
-	int type;
-	int timestamp;
-	int event_ID;
-	NODE* active_user;
-	NODE* passive_user;
-};
-
-struct CLUSTER
-{
-	CLUSTER(int cluster)
-	{
-		cluster_ID = cluster;
-		n_edges_within=0;
-		n_edges_ingoing=0;
-		n_edges_outgoing=0;
-		n_events_total=0;
-		n_active_users = 0;
-		average_activity=0;
-		for(int i=1; i<4; i++)
-		{
-			n_events_within[i] = 0;
-			n_ingoing_events[i] = 0;
-			n_outgoing_events[i] = 0;
-		}
-	}
-
-	int cluster_ID;
-	int cluster_size;
-	std::vector<NODE*> nodes_in_cluster;
-	
-	int n_events_within[4];
-	int n_ingoing_events[4];
-	int n_outgoing_events[4];
-	int n_events_total;
-	
-	int n_edges_within;
-	int n_edges_ingoing;
-	int n_edges_outgoing;
-
-	float average_intertime;
-	float average_activity;
-
-	int n_active_users; //active users include users that have associated a passive event (e.g. being retweeted)
-};
-
-struct INTERTIME
-{
-	INTERTIME(int)
-	{
-		av_intertime=0;
-		n_activity=0;
-		is_active=0;
-		is_spike_train=0;
-		local_variation=0;
-	}
-	int node_ID;
-	int is_active;
-	int is_spike_train;
-	NODE* link_to_node;
-	float av_intertime;
-	int n_activity;
-	std::vector<EVENT*> interactions;
-
-	float local_variation;
-
-};
+#include "tools.h"
 
 
 int main(int argc, char** argv)
 {
-
-//the flow follows the follwing scheme
-//	1. read higgs-social-network and fill a std::vector<NODE> higgs-nodes //should be in ascending order, with none missing
-//	2. read higgs-activity-time and fill std::vector<INTERACTION> higgs-activity
-//  3. read clusterID_nodeID and fill std::vector<CLUSTER> higgs-clusters
-//	4. at this point all information are loaded and calculations can be made
-
-
 	std::ifstream input;
 	std::ofstream output;
 
-	std::vector<NODE> higgs_nodes;
-	std::vector<EVENT> higgs_event;
-	std::vector<CLUSTER> higgs_cluster;
-	std::vector<INTERTIME> node_intertime;
+
+	std::vector<NODE> nodes;
+	std::vector<EVENT> events;
+	std::vector<CLUSTER> clusters;
 
 
-	// // // READ USERS
-	input.open("users.txt");
-		int IDS;
-		int n_nodes=0;
-		NODE aux(0);
-		higgs_nodes.push_back(aux);
-		while(input.good())
-		{
-			//read nodes
-			n_nodes++;
-			input >> IDS;
-			aux.node_ID = IDS;
-			higgs_nodes.push_back(aux);		
-		}
-		input.close();	
-	// // // End of READ USERS
-
-	// // // READ FOLLOWING/FOLLOWERS
-	input.open("following.txt");
-		int user1, user2;
-		while(input.good())
-		{
-			input >> user1 >> user2;
-			higgs_nodes[user1].following.push_back(&higgs_nodes[user2]);	//following
-			higgs_nodes[user2].follower.push_back(&higgs_nodes[user1]); 	//followers
-		}
-		input.close();
+	//AUXILIARY VARIABLES
+	int id, n, iter;
+	int user1, user2;
+	int time, t_events;
+	int n_nodes = 0;
+	int n_clusters = 0;
+	int n_events = 0;
 
 
-		for(int i=1; i<=n_nodes; i++)
-		{
-			higgs_nodes[i].n_following= higgs_nodes[i].following.size();
-			higgs_nodes[i].n_followers= higgs_nodes[i].follower.size();
-		}
-	// // // End of FOLLOWING/FOLLOWERS
-
-	// // // READ CLUSTER
-	input.open("clusters.txt");
-		int c;
-		int n_clusters = 0;
-		CLUSTER cluster(0);
-		while(input.good())
-		{
-			input >> c;
-			cluster.cluster_ID = c;
-			higgs_cluster.push_back(cluster);
-			n_clusters++;
-		}
-		input.close();
-	// // // End of READ CLUSTER
-
-	// // // NODE in CLUSTER
-	input.open("node_clusters.txt");
-		int n;
-		NODE* node_to_push;
-		while(input.good())
-		{
-			input >> n >> c;
-			higgs_nodes[n].cluster_ID = c;
-			node_to_push = &higgs_nodes[n];
-			higgs_cluster[c].nodes_in_cluster.push_back(node_to_push);
-		}
-
-		for(int i=0; i<n_clusters; i++)
-		{
-			higgs_cluster[i].cluster_size = higgs_cluster[i].nodes_in_cluster.size();
-		}
-		input.close();
-	// // // End of NODE in CLUSTER
-
-	// // // READ INTERACTIONS
-	input.open("interactions.txt");
-		int time, event, n_events=0;
-		EVENT interaction(0,0);
-		while(input.good())
-		{
-			input >> user1 >> user2 >> time >> event;
-			interaction.type = event;
-			interaction.event_ID = n_events;
-			interaction.timestamp = time;
-			interaction.active_user = &higgs_nodes[user1];
-			interaction.passive_user = &higgs_nodes[user2];
-			higgs_event.push_back(interaction);
-			
-			n_events++;
-
-		}
-		input.close();
-	// // // End of READ INTERACTIONS
-
-
-	//EVENTS IN/OUT-GOING - CLUSTER
-		for(int i=0; i<n_events; i++)
-		{
-			higgs_cluster[higgs_event[i].active_user->cluster_ID].n_outgoing_events[higgs_event[i].type]++;
-			higgs_cluster[higgs_event[i].passive_user->cluster_ID].n_ingoing_events[higgs_event[i].type]++;
-		}
-
-	//EVENTS WITHIN CLUSTER
-		for(int i=0; i<n_events; i++)
-		{
-			if(higgs_event[i].active_user->cluster_ID == higgs_event[i].passive_user->cluster_ID)
-			{
-				higgs_cluster[higgs_event[i].active_user->cluster_ID].n_events_within[higgs_event[i].type]++;
-			}
-		}
-
-	//EDGES INGOING/OUTGOING CLUSTER
-		input.open("following.txt");
-		
-		while(input.good())
-		{
-			input >> user1 >> user2;
-			if(higgs_nodes[user1].cluster_ID != higgs_nodes[user2].cluster_ID)
-			{
-				higgs_cluster[higgs_nodes[user1].cluster_ID].n_edges_outgoing++;
-				higgs_cluster[higgs_nodes[user2].cluster_ID].n_edges_ingoing++;
-			}
-			if(higgs_nodes[user1].cluster_ID == higgs_nodes[user2].cluster_ID)
-			{
-				higgs_cluster[higgs_nodes[user1].cluster_ID].n_edges_within++;
-			}
-
-		}
-		input.close();
-
-	//TOTAL EVENTS
-		for(int i=0; i<n_clusters; i++)
-		{
-			for(int j=1; j<4; j++)
-			{
-				higgs_cluster[i].n_events_total =  	higgs_cluster[i].n_events_total + 
-													higgs_cluster[i].n_events_within[j] + 
-													higgs_cluster[i].n_outgoing_events[j];
-			}
-			
-			if(higgs_cluster[i].n_events_total != 0)
-			{
-				//std::cout<<higgs_cluster[i].cluster_size<<" "<<higgs_cluster[i].n_events_total<<std::endl;
-			}
-		}
-
-	//ACTIVE USERS
-		int debug_active_users=0;
-		input.open("interactions.txt");
-		while(input.good())
-		{
-			input>> user1 >> user2;
-			if(higgs_nodes[user1].is_active!=1)
-			{
-				higgs_nodes[user1].is_active=1;
-				debug_active_users++;
-				higgs_cluster[higgs_nodes[user1].cluster_ID].n_active_users++;
-			}
-			if(higgs_nodes[user2].is_active!=1)
-			{
-				higgs_nodes[user2].is_active=1;
-				higgs_cluster[higgs_nodes[user2].cluster_ID].n_active_users++;
-			}
-		}
-
-		input.close();
-		//std::cout<<"ACTIVE USERS: "<<debug_active_users<<std::endl;
-
-		INTERTIME inter_time(0);
-		node_intertime.push_back(inter_time);
-		for(int i=1; i<=n_nodes; i++)
-		{	
-				inter_time.node_ID = higgs_nodes[i].node_ID;
-				node_intertime.push_back(inter_time);
-		}
-
-		for(int i=0; i<n_events; i++)
-		{
-
-			node_intertime[higgs_event[i].active_user->node_ID].interactions.push_back(&higgs_event[i]);
-			node_intertime[higgs_event[i].active_user->node_ID].is_active = 1;
-		}
-
-	//INTERTIME
-		int flag = 0;
-		int previous;
-		int timestamp1, timestamp2;
-		for(int i=1; i<=n_nodes; i++)
-		{
-			if(node_intertime[i].is_active && node_intertime[i].interactions.size() > 1)
-			{
-				for(int j=0; j<node_intertime[i].interactions.size(); j++)
-				{
-					if(flag==0 && j==0)
-					{
-						timestamp1 = node_intertime[i].interactions[j]->timestamp;
-						flag=1;
-					}
-					else if(!flag)
-					{
-						timestamp1 = previous;
-						flag = 1;
-					}
-					if(flag)
-					{
-						timestamp2 = node_intertime[i].interactions[j]->timestamp;
-						node_intertime[i].av_intertime += timestamp2 - timestamp1;
-						previous = timestamp2;
-						flag = 0;
-					}
-				}
-				if(!node_intertime[i].av_intertime)
-				{
-					node_intertime[i].av_intertime = (double) node_intertime[i].av_intertime / (node_intertime[i].interactions.size()-1);
-				}
-				higgs_nodes[i].intertime = node_intertime[i].av_intertime;
-				//std::cout<<higgs_nodes[i].intertime<<std::endl;
-			}
-		}
-
-		//OUTPUT INTERTIME
-		output.open("intertime_dist.txt");
-		for(int i=1; i<=n_nodes; i++)
-		{
-			if(node_intertime[i].is_active && node_intertime[i].interactions.size()>1)
-			{
-				output<< node_intertime[i].av_intertime <<std::endl; 
-			}
-		}
-		output.close();
-
-
-		int intertime_active_users = 0;
-		for(int i=0; i<n_clusters; i++)
-		{
-			for(int j=0; j<higgs_cluster[i].cluster_size; j++)
-			{
-				if(higgs_cluster[i].nodes_in_cluster[j]->is_active && node_intertime[higgs_cluster[i].nodes_in_cluster[j]->node_ID].interactions.size() > 1)
-				{
-					higgs_cluster[i].average_intertime += higgs_cluster[i].nodes_in_cluster[j]->intertime;
-					intertime_active_users++;
-				}
-			}
-			higgs_cluster[i].average_intertime = higgs_cluster[i].average_intertime / intertime_active_users;
-			std::cout<<higgs_cluster[i].cluster_size<<" "<<higgs_cluster[i].average_intertime<<std::endl;;
-			intertime_active_users = 0;
-
-		}
-
-
-	//LOCAL VARIATION
-	//is spike trains?
-		for (int i = 1; i <= n_nodes; ++i)
-		{
-			if(node_intertime[i].interactions.size()>2)
-			{
-				node_intertime[i].is_spike_train=1;
-			}
-		}
-	
-	//local variation
-	float positive_variation, negative_variation;
-	int skipped=0;
-	int spike_train_nodes=0;
-	float average_local_variation=0;
-
-	for(int i=1; i<=n_nodes; i++)
+	//READ USERS;
+	input.open("./include/users.txt");
+	NODE aux;
+	nodes.push_back(aux);
+	while(input.good())
 	{
-		if(node_intertime[i].is_spike_train)
-		{
-			for(int j=1; j<node_intertime[i].interactions.size()-1; j++)
-			{
-				negative_variation = node_intertime[i].interactions[j+1]->timestamp - 2* node_intertime[i].interactions[j]->timestamp + node_intertime[i].interactions[j-1]->timestamp;
-				positive_variation  = node_intertime[i].interactions[j+1]->timestamp - node_intertime[i].interactions[j-1]->timestamp;
-				if(negative_variation==0)
-				{
-					continue;
-				}	
-				else
-				{
-					node_intertime[i].local_variation +=  ((double)negative_variation/positive_variation)*((double)negative_variation/positive_variation);
-				}
-				
-			}
-			
-			node_intertime[i].local_variation = (double) node_intertime[i].local_variation*3/(node_intertime[i].interactions.size() - 2);
-			average_local_variation += node_intertime[i].local_variation;
-			spike_train_nodes++;
-
-			//DEBUG
-			//std::cout<<node_intertime[i].local_variation<<std::endl;
-
-		}
+		input >> id;
+		aux.ID = id;
+		nodes.push_back(aux);
+		n_nodes++;
 	}
+	input.close();
+	
+	//READ FOLLOWING
+	input.open("./include/following.txt");
+	while(input.good())
+	{
+		input >> user1 >> user2;
+		nodes[user1].following.push_back(&nodes[user2]);
+		nodes[user2].follower.push_back(&nodes[user1]);
 
-	//std::cout<<"AVERAGE LOCAL VARIATION: "<<(double)average_local_variation/spike_train_nodes<<std::endl;
-	//std::cout<<"SPIKE USERS: "<<spike_train_nodes<<std::endl;
+	}
+	input.close();
 
-	/*
-	//OUTPUT by cluster
+	//READ CLUSTERS
+	input.open("./include/clusters.txt");
+	CLUSTER cluster(0);
+	while(input.good())
+	{
+		input >> id;
+		cluster.ID = id;
+		clusters.push_back(cluster);
+		n_clusters++;
+	}
+	input.close();
+
+	//DEBUG CLUSTERS ID
+	int not_matching=0;
 	for(int i=0; i<n_clusters; i++)
 	{
-		if(higgs_cluster[i].cluster_size >= 100 && higgs_cluster[i].cluster_size <1000)
+		if(clusters[i].ID != i)
 		{
-			for(int j=0; j<higgs_cluster[i].cluster_size; j++)
+			not_matching++;
+			std::cerr<<"Errors: clusters IDs not matching (total not matching: "<< not_matching<<")"<<std::endl;
+			
+		}
+	}
+	//READ NODE in CLUSTER
+	input.open("./include/node_clusters.txt");
+	NODE* node_to_push;
+	while(input.good())
+	{
+		input >> id >> n;
+		nodes[id].clusterID = n;
+		node_to_push = &nodes[id];
+		clusters[n].nodes_in_cluster.push_back(node_to_push);
+	}
+
+	for(int i=0; i<n_clusters; i++)
+	{
+		clusters[i].size = clusters[i].nodes_in_cluster.size();
+	}
+	input.close();
+
+	//READ EVENTS
+	input.open("./include/interactions.txt");
+	EVENT interaction;
+	while(input.good())
+	{
+		input >> user1 >> user2 >> time >> t_events;
+		interaction.type = t_events;
+		interaction.timestamp = time;
+		interaction.active_user = &nodes[user1];
+		interaction.passive_user = &nodes[user2];
+		events.push_back(interaction);
+		nodes[user1].active_in_event.push_back(&events[n_events]);
+		n_events++;
+		nodes[user1].is_active = 1;
+	}
+
+	for(int i=0; i<n_events; i++)
+	{
+		if(i==0)
+		{
+			events[i].next = &events[i+1];
+			events[i].previous = NULL;
+		}
+		else if(i==n_events-1)
+		{
+			events[i].previous = &events[i-1];
+			events[i].next = NULL;
+		}
+		else
+		{
+			events[i].previous = &events[i-1];
+			events[i].next = &events[i+1];
+			
+		}
+	}
+
+	//EVENTS WITHIN/INGOING/OUTGOING CLUSTER
+	for(int i =0; i<n_events; i++)
+	{
+		if(events[i].active_user->clusterID == events[i].passive_user->clusterID)
+		{
+			clusters[events[i].active_user->clusterID].events_within.push_back(&events[i]);
+			switch(events[i].type)
 			{
-				if(node_intertime[higgs_cluster[i].nodes_in_cluster[j]->node_ID].is_spike_train)
-				{
-					std::cout<< std::setprecision(2)<< node_intertime[higgs_cluster[i].nodes_in_cluster[j]->node_ID].local_variation<<std::endl;
-				}
+				case 1:
+					clusters[events[i].active_user->clusterID].n_events_within[0]++;
+					break;
+				case 2:
+					clusters[events[i].active_user->clusterID].n_events_within[1]++;
+					break;
+				case 3:
+					clusters[events[i].active_user->clusterID].n_events_within[2]++;
+					break;
+				default:
+					std::cerr<<"Error: event is of unknown type"<<std::endl;
+					break; 
+			}
+		}
+		else
+		{
+			clusters[events[i].active_user->clusterID].events_outgoing.push_back(&events[i]);
+			clusters[events[i].passive_user->clusterID].events_ingoing.push_back(&events[i]);
+			switch(events[i].type)
+			{
+				case 1:
+					clusters[events[i].active_user->clusterID].n_events_outgoing[0]++;
+					clusters[events[i].passive_user->clusterID].n_events_ingoing[0]++;
+					break;
+				case 2:
+					clusters[events[i].active_user->clusterID].n_events_outgoing[1]++;
+					clusters[events[i].passive_user->clusterID].n_events_ingoing[1]++;
+					break;
+				case 3:
+					clusters[events[i].active_user->clusterID].n_events_outgoing[2]++;
+					clusters[events[i].passive_user->clusterID].n_events_ingoing[2]++;
+					break;
+				default:
+					std::cerr<<"Error: event is of unknown type"<<std::endl;
+					break; 
 			}
 		}
 	}
-	*/
-	
-	//OUTPUT OVERALL
-	output.open("local_variation_all_nodes.txt");
-	for(int i=1; i<=n_nodes; i++)
+
+	for(int i=1; i<n_nodes+1; i++)
 	{
-		if(node_intertime[i].is_spike_train)
+		for(int j=0; j<nodes[i].n_following; j++)
 		{
-			output<<std::setprecision(2)<<node_intertime[i].local_variation<<std::endl;
+			if(nodes[i].clusterID == nodes[i].following[j]->clusterID)
+			{
+				//edges within
+				clusters[nodes[i].clusterID].n_edges[0]++; 
+			}
+			else
+			{
+				//edges outgoing
+				clusters[nodes[i].clusterID].n_edges[2]++; 
+				//edges ingoing
+				clusters[nodes[i].following[j]->clusterID].n_edges[1]++; 
+			}
+		}
+	}
+
+	//COMPUTE ACTIVITY and INTERTIME
+	for(int i=1; i<n_nodes+1; i++)
+	{
+		nodes[i].compute_activations();
+		nodes[i].compute_intertime();
+	}
+
+	//COMPUTE ACTIVE USERS, INTERTIME AND AVERAGE ACTIVATION
+	for(int i=0; i<n_clusters; i++)
+	{
+		clusters[i].find_active_users();
+		clusters[i].compute_activity();
+		clusters[i].compute_intertime();
+		if(clusters[i].size > 24)
+		{
+			clusters[i].compute_event_intertime();
+		}
+	}
+
+	/*
+	//PRINT 0-within, 1-ingoing, 2-outgoing, 0-retweet, 1-mentions, 2-replies
+	//WHITIN
+	output.open("RT_within_normalized.txt");
+	print_n_events(0, 0, clusters, 1, output);
+	output.close();
+
+	output.open("MT_within_normalized.txt");
+	print_n_events(0, 1, clusters, 1, output);
+	output.close();
+
+	output.open("RE_within_normalized.txt");
+	print_n_events(0, 2, clusters, 1, output);
+	output.close();
+
+	//INGOING
+	output.open("RT_ingoing_normalized.txt");
+	print_n_events(1, 0, clusters, 1, output);
+	output.close();
+
+	output.open("MT_ingoing_normalized.txt");
+	print_n_events(1, 1, clusters, 1, output);
+	output.close();
+
+	output.open("RE_ingoing_normalized.txt");
+	print_n_events(1, 2, clusters, 1, output);
+	output.close();
+
+	//OUTGOING
+	output.open("RT_ougoing_normalized.txt");
+	print_n_events(2, 0, clusters, 1, output);
+	output.close();
+
+	output.open("MT_ougoing_normalized.txt");
+	print_n_events(2, 1, clusters, 1, output);
+	output.close();
+
+	output.open("RE_ougoing_normalized.txt");
+	print_n_events(2, 2, clusters, 1, output);
+	output.close();
+	*/
+
+
+	/*
+	output.open("intertime_within.txt");
+	for(int i=0; i<n_clusters; i++)
+	{
+		if(clusters[i].size >24)
+		{
+			output<< clusters[i].size << " " << clusters[i].cluster_within_intertime<<std::endl;
 		} 
 	}
 	output.close();
+
+	output.open("intertime_outgoing.txt");
+	for(int i=0; i<n_clusters; i++)
+	{
+		if(clusters[i].size >24)
+		{
+			output<< clusters[i].size << " " << clusters[i].cluster_outgoing_intertime<<std::endl;
+		} 
+	}
+	output.close();
+
+	output.open("intertime_node_average.txt");
+	for(int i=0; i<n_clusters; i++)
+	{
+		if(clusters[i].size >24)
+		{
+			output<< clusters[i].size << " " << clusters[i].average_intertime<<std::endl;
+		} 
+	}
+	output.close();
+	*/
+
+
+
+	/*
+	output.open("burst_intertime.txt");
+	for(int i=0; i<n_clusters; i++)
+	{
+		clusters[i].compute_burst_index();
+		for(int j=0; j<clusters[i].events_within.size(); j++)
+		{
+			if(clusters[i].events_within[j]->burst_index != 666)
+			{
+				output << clusters[i].events_within[j]->timestamp << " " << clusters[i].events_within[j]->burst_index << std::endl;
+			}
+		}
+		for(int j=0; j<clusters[i].events_outgoing.size(); j++)
+		{
+			if(clusters[i].events_outgoing[j]->burst_index != 666)
+			{
+				output << clusters[i].events_outgoing[j]->timestamp << " " << clusters[i].events_outgoing[j]->burst_index << std::endl;
+			}
+		}
+	}
+
+	output.close();
+	*/
+
+	compute_burst_index_from_event_list(events, n_events);
+	output.open("burst_index_s100-1000.txt");
 	
+	for(int i=0; i<n_clusters; i++)
+	{
+		if(clusters[i].size > 100 && clusters[i].size < 1000)
+		{
+			for(int j=0; j<clusters[i].events_within.size(); j++)
+			{
+				output << clusters[i].events_within[j]->timestamp << " " <<clusters[i].events_within[j]->burst_index<<std::endl;
+			}
+		}
+	}
+
+	output.close();
 
 
 
-return 0;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
