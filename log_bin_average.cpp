@@ -23,98 +23,35 @@ int main(int argc, char** argv)
 	}
 	input.close();
 
-	double sum=0;
-	int index=1;
-	int ord=10;
-	int items=0;
-	int bins=0;
+	std::vector<int> bins = { 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 12000 };
 
 
-	//find max
-	double max=0;
-	for(int i=0; i<n; i++)
+	double sum =0;
+	int items = 0;
+	for(int i=1; i<bins.size(); i++)
 	{
-		if(x[i]>max)
+		for(int j=0; j<x.size(); j++)
 		{
-			max = x[i];
+			if(x[j] >= bins[i-1] && x[j] < bins[i])
+			{
+				sum += y[j];
+				items++; 
+			}
 		}
-	}
-
-// // // // // // // //
-	/*
-	for(int i=0; i<n; i++)
-	{
-		if(x[i]<index*ord)
+		if(items != 0)
 		{
-			sum+= y[i];
-			items++;
-		}
-		if(x[i]>=index*ord || i==n-1)		
-		{
-			bins++;
-			binned_average_x.push_back(index*ord - ord*0.5);
+			binned_average_x.push_back((bins[i]+ bins[i-1])*0.5);
 			binned_average_y.push_back(sum/items);
-			index++;
-			sum = y[i];
-			items = 1;
-			if(index == 9)
-			{
-				index=1;
-				ord = ord*10;
-			}
 		}
-	}
-	*/
-// // // // // // // //
-
-
-	for(int i=1; i<=9; i++)
-	{
-		for(int j=0; j<n; j++)
-		{
-			if(x[j]>=i*ord && x[j]<(i+1)*ord)
-			{
-				sum+= y[j];
-				items++;
-			}
-		}
-		binned_average_x.push_back(i*ord - ord*0.5);
-		binned_average_y.push_back(sum/items);
-		bins++;
-		sum=0;
 		items=0;
-		if(i==9)
-		{
-			ord = ord*10;
-			i=1; 
-		}
-		if(i*ord > max)
-		{
-			break;
-		}
+		sum=0;
+
 	}
+	
 
-
-	output.open(argv[2]);
-	for(int i=0; i<bins; i++)
+	for(int i=0 ; i<binned_average_x.size(); i++)
 	{
-		output << binned_average_x[i] << " " << binned_average_y[i] <<std::endl;  
+		std::cout<<binned_average_x[i]<< " " << binned_average_y[i] <<std::endl;
 	}
-
-
-	output.close();
-
-
-
-
-
-
-
-
-
-
-
-
-
 	return 0;
 }
