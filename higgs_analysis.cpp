@@ -8,6 +8,7 @@
 //June 27th		re-implementation: fixing memory-alloc errors
 //June 28th		events in clusters, edges in cluster
 //June 29th 	implemented print_n_events() function (see tools.h)
+//July 2nd		intertime by type within cluster, regardless of user
 
 
 #include <iostream>
@@ -22,7 +23,7 @@
 int main(int argc, char** argv)
 {
 	std::ifstream input;
-	std::ofstream output;
+	std::ofstream output, output_2, output_3;
 
 
 	std::vector<NODE> nodes;
@@ -216,136 +217,239 @@ int main(int argc, char** argv)
 	for(int i=0; i<n_clusters; i++)
 	{
 		clusters[i].find_active_users();
+		clusters[i].compute_fraction_active();
 		clusters[i].compute_activity();
 		clusters[i].compute_intertime();
 		if(clusters[i].size > 24)
 		{
-			clusters[i].compute_event_intertime();
+			clusters[i].compute_event_intertime(2);
+			clusters[i].compute_time_dependent_fraction_active();
 		}
 	}
 
 	/*
-	//PRINT 0-within, 1-ingoing, 2-outgoing, 0-retweet, 1-mentions, 2-replies
-	//WHITIN
-	output.open("RT_within_normalized.txt");
-	print_n_events(0, 0, clusters, 1, output);
-	output.close();
-
-	output.open("MT_within_normalized.txt");
-	print_n_events(0, 1, clusters, 1, output);
-	output.close();
-
-	output.open("RE_within_normalized.txt");
-	print_n_events(0, 2, clusters, 1, output);
-	output.close();
-
-	//INGOING
-	output.open("RT_ingoing_normalized.txt");
-	print_n_events(1, 0, clusters, 1, output);
-	output.close();
-
-	output.open("MT_ingoing_normalized.txt");
-	print_n_events(1, 1, clusters, 1, output);
-	output.close();
-
-	output.open("RE_ingoing_normalized.txt");
-	print_n_events(1, 2, clusters, 1, output);
-	output.close();
-
-	//OUTGOING
-	output.open("RT_ougoing_normalized.txt");
-	print_n_events(2, 0, clusters, 1, output);
-	output.close();
-
-	output.open("MT_ougoing_normalized.txt");
-	print_n_events(2, 1, clusters, 1, output);
-	output.close();
-
-	output.open("RE_ougoing_normalized.txt");
-	print_n_events(2, 2, clusters, 1, output);
-	output.close();
-	*/
-
-
-	/*
-	output.open("intertime_within.txt");
-	for(int i=0; i<n_clusters; i++)
-	{
-		if(clusters[i].size >24)
+		output.open("intertime_re_within.txt");
+		for(int i=0; i<n_clusters; i++)
 		{
-			output<< clusters[i].size << " " << clusters[i].cluster_within_intertime<<std::endl;
-		} 
-	}
-	output.close();
-
-	output.open("intertime_outgoing.txt");
-	for(int i=0; i<n_clusters; i++)
-	{
-		if(clusters[i].size >24)
-		{
-			output<< clusters[i].size << " " << clusters[i].cluster_outgoing_intertime<<std::endl;
-		} 
-	}
-	output.close();
-
-	output.open("intertime_node_average.txt");
-	for(int i=0; i<n_clusters; i++)
-	{
-		if(clusters[i].size >24)
-		{
-			output<< clusters[i].size << " " << clusters[i].average_intertime<<std::endl;
-		} 
-	}
-	output.close();
-	*/
-
-
-
-	/*
-	output.open("burst_intertime.txt");
-	for(int i=0; i<n_clusters; i++)
-	{
-		clusters[i].compute_burst_index();
-		for(int j=0; j<clusters[i].events_within.size(); j++)
-		{
-			if(clusters[i].events_within[j]->burst_index != 666)
+			if(clusters[i].size > 24)
 			{
-				output << clusters[i].events_within[j]->timestamp << " " << clusters[i].events_within[j]->burst_index << std::endl;
+				output<<clusters[i].size << " " << clusters[i].cluster_within_intertime <<std::endl;
 			}
 		}
-		for(int j=0; j<clusters[i].events_outgoing.size(); j++)
+		output.close();
+
+		output.open("intertime_re_outgoing.txt");
+		for(int i=0; i<n_clusters; i++)
 		{
-			if(clusters[i].events_outgoing[j]->burst_index != 666)
+			if(clusters[i].size > 24)
 			{
-				output << clusters[i].events_outgoing[j]->timestamp << " " << clusters[i].events_outgoing[j]->burst_index << std::endl;
+				output<<clusters[i].size << " " << clusters[i].cluster_outgoing_intertime <<std::endl;
 			}
 		}
-	}
+		output.close();
 
-	output.close();
-	*/
-
-	compute_burst_index_from_event_list(events, n_events);
-	output.open("burst_index_s100-1000.txt");
-	
-	for(int i=0; i<n_clusters; i++)
-	{
-		if(clusters[i].size > 100 && clusters[i].size < 1000)
+		output.open("intertime_re_ingoing.txt");
+		for(int i=0; i<n_clusters; i++)
 		{
+			if(clusters[i].size > 24)
+			{
+				output<<clusters[i].size << " " << clusters[i].cluster_ingoing_intertime <<std::endl;
+			}
+		}
+		output.close();
+		*/
+		/*
+		//PRINT 0-within, 1-ingoing, 2-outgoing, 0-retweet, 1-mentions, 2-replies
+		//WHITIN
+		output.open("RT_within_normalized.txt");
+		print_n_events(0, 0, clusters, 1, output);
+		output.close();
+
+		output.open("MT_within_normalized.txt");
+		print_n_events(0, 1, clusters, 1, output);
+		output.close();
+
+		output.open("RE_within_normalized.txt");
+		print_n_events(0, 2, clusters, 1, output);
+		output.close();
+
+		//INGOING
+		output.open("RT_ingoing_normalized.txt");
+		print_n_events(1, 0, clusters, 1, output);
+		output.close();
+
+		output.open("MT_ingoing_normalized.txt");
+		print_n_events(1, 1, clusters, 1, output);
+		output.close();
+
+		output.open("RE_ingoing_normalized.txt");
+		print_n_events(1, 2, clusters, 1, output);
+		output.close();
+
+		//OUTGOING
+		output.open("RT_ougoing_normalized.txt");
+		print_n_events(2, 0, clusters, 1, output);
+		output.close();
+
+		output.open("MT_ougoing_normalized.txt");
+		print_n_events(2, 1, clusters, 1, output);
+		output.close();
+
+		output.open("RE_ougoing_normalized.txt");
+		print_n_events(2, 2, clusters, 1, output);
+		output.close();
+		*/
+
+
+		/*
+		output.open("intertime_within.txt");
+		for(int i=0; i<n_clusters; i++)
+		{
+			if(clusters[i].size >24)
+			{
+				output<< clusters[i].size << " " << clusters[i].cluster_within_intertime<<std::endl;
+			} 
+		}
+		output.close();
+
+		output.open("intertime_outgoing.txt");
+		for(int i=0; i<n_clusters; i++)
+		{
+			if(clusters[i].size >24)
+			{
+				output<< clusters[i].size << " " << clusters[i].cluster_outgoing_intertime<<std::endl;
+			} 
+		}
+		output.close();
+
+		output.open("intertime_node_average.txt");
+		for(int i=0; i<n_clusters; i++)
+		{
+			if(clusters[i].size >24)
+			{
+				output<< clusters[i].size << " " << clusters[i].average_intertime<<std::endl;
+			} 
+		}
+		output.close();
+		*/
+
+
+
+		/*
+		output.open("burst_intertime.txt");
+		for(int i=0; i<n_clusters; i++)
+		{
+			clusters[i].compute_burst_index();
 			for(int j=0; j<clusters[i].events_within.size(); j++)
 			{
-				output << clusters[i].events_within[j]->timestamp << " " <<clusters[i].events_within[j]->burst_index<<std::endl;
+				if(clusters[i].events_within[j]->burst_index != 666)
+				{
+					output << clusters[i].events_within[j]->timestamp << " " << clusters[i].events_within[j]->burst_index << std::endl;
+				}
 			}
+			for(int j=0; j<clusters[i].events_outgoing.size(); j++)
+			{
+				if(clusters[i].events_outgoing[j]->burst_index != 666)
+				{
+					output << clusters[i].events_outgoing[j]->timestamp << " " << clusters[i].events_outgoing[j]->burst_index << std::endl;
+				}
+			}
+		}
+
+		output.close();
+		*/
+		/*
+		compute_burst_index_from_event_list(events, n_events);
+		output.open("burst_index_s100-1000.txt");
+		
+		for(int i=0; i<n_clusters; i++)
+		{
+			if(clusters[i].size > 100 && clusters[i].size < 1000)
+			{
+				for(int j=0; j<clusters[i].events_within.size(); j++)
+				{
+					output << clusters[i].events_within[j]->timestamp << " " <<clusters[i].events_within[j]->burst_index<<std::endl;
+				}
+			}
+		}
+
+		output.close();
+		*/
+		/*
+		output.open("fraction_activated_25_100.txt");
+		for(int i=0; i<n_clusters; i++)
+		{
+			if(clusters[i].size > 24 && clusters[i].size < 100)
+			{
+				for(int i=0; i<clusters[i].fraction_active_users.size(); i++)
+				{
+					output << clusters[i].fraction_active_timestamp[i] << " " << clusters[i].fraction_active_users[i] <<std::endl;
+				}
+			}
+		}
+		output.close();
+		*/
+
+	//TOTAL ACTIVITY
+	output.open("total_activity.txt");
+	for(int i=0; i<n_clusters; i++)
+	{
+		if(clusters[i].size > 24)
+		{
+			output << clusters[i].size << " " << (double)(clusters[i].events_within.size() + clusters[i].events_outgoing.size() + clusters[i].events_ingoing.size())/clusters[i].n_active_users <<std::endl;
+		}
+	}
+	output.close();
+
+/*
+	//TOTAL ACTIVITY BY TYPE
+	output.open("total_activity_within.txt");
+	output_2.open("total_activity_outgoing.txt");
+	output_3.open("total_activity_ingoing.txt");
+
+	for(int i=0; i<n_clusters; i++)
+	{
+		if(clusters[i].size > 24)
+		{
+			output << clusters[i].size << " " << (double)clusters[i].events_within.size()/clusters[i].n_active_users <<std::endl;
+			output_2 << clusters[i].size << " " << (double)clusters[i].events_outgoing.size()/clusters[i].n_active_users <<std::endl;
+			output_3 << clusters[i].size << " " << (double)clusters[i].events_ingoing.size()/clusters[i].n_active_users <<std::endl;
 		}
 	}
 
 	output.close();
+	output_2.close();
+	output_3.close();
+*/
+
+/*	//FRACTION ACTIVATED NODES
+	output.open("fraction_activated_nodes.txt");
+	for(int i=0; i<n_clusters; i++)
+	{
+		if(clusters[i].size > 24)
+		{
+			output << clusters[i].size << " " << clusters[i].fraction_active <<std::endl;
+		}
+	}
+	output.close();
+
+	//AVERAGE NODE ACTIVATION
+	output.open("average_node_activation.txt");
+	for(int i=0; i<n_clusters; i++)
+	{
+		if(clusters[i].size > 24)
+		{
+			output << clusters[i].size << " " << clusters[i].average_activity <<std::endl;
+		}
+	}
+	output.close();
+*/
 
 
 
 
 
-
+	return 0;
 
 
 

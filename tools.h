@@ -89,6 +89,7 @@ struct EVENT
 	EVENT* next;
 };
 
+
 struct CLUSTER
 {
 	public: 
@@ -100,6 +101,7 @@ struct CLUSTER
 		average_intertime = 0;
 		cluster_within_intertime = 0;
 		cluster_outgoing_intertime = 0;
+		cluster_ingoing_intertime = 0;
 		average_activity = 0;
 		n_total_events = 0;
 
@@ -122,8 +124,10 @@ struct CLUSTER
 	void find_active_users();
 	void compute_intertime();
 	void compute_activity();
-	void compute_event_intertime();
+	void compute_event_intertime(int type);
 	void compute_burst_index();
+	void compute_fraction_active();
+	void compute_time_dependent_fraction_active();			//NEEDS BETTER IMPLEMENTATION
 
 	void print_intertime();
 
@@ -133,6 +137,7 @@ struct CLUSTER
 	int size;
 
 	int n_active_users;
+	float fraction_active;
 	int n_events_within[3];
 	int n_events_ingoing[3];
 	int n_events_outgoing[3];
@@ -144,11 +149,15 @@ struct CLUSTER
 	float average_activity;
 	float cluster_within_intertime;
 	float cluster_outgoing_intertime;
+	float cluster_ingoing_intertime;
 
 	std::vector<NODE*> nodes_in_cluster;
 	std::vector<EVENT*> events_within;
 	std::vector<EVENT*> events_ingoing;
 	std::vector<EVENT*> events_outgoing;
+
+	std::vector<double> fraction_active_users;
+	std::vector<float> fraction_active_timestamp;
 
 
 };
@@ -162,6 +171,14 @@ void CLUSTER::find_active_users()
 		{
 			n_active_users++;
 		}
+	}
+}
+
+void CLUSTER::compute_fraction_active()
+{	
+	if(size>24 && n_active_users > 1)
+	{
+		fraction_active = (float) n_active_users / size;
 	}
 }
 
@@ -190,21 +207,97 @@ void CLUSTER::compute_intertime()
 	average_intertime = (float) average_intertime / size;
 }
 
-void CLUSTER::compute_event_intertime()
+void CLUSTER::compute_time_dependent_fraction_active()                                                                   //<----- NEED TO BE IMPLEMENTED
 {
-	if(size > 24)
+	int bin_size = 600;
+	int iter = 0;
+	double fraction = 0;
+	for(int i=0; i<1000; i++)
 	{
-		for(int i=1; i<events_within.size(); i++)
+		for(int i=0; i<events_within.size(); i++)
 		{
-			cluster_within_intertime += events_within[i]->timestamp - events_within[i-1]->timestamp;
+			if(events_within[i]->timestamp > i*bin_size && events_within[i]->timestamp < (i+1)*bin_size)
+			{
+				fraction++;
+			}
 		}
-		for(int i=1; i<events_outgoing.size(); i++)
+		for(int i=0; i<events_outgoing.size(); i++)
 		{
-			cluster_outgoing_intertime += events_outgoing[i]->timestamp - events_outgoing[i-1]->timestamp;
+			if(events_outgoing[i]->timestamp > i*bin_size && events_outgoing[i]->timestamp < (i+1)*bin_size)
+			{
+				fraction++;
+			}
 		}
 
-		cluster_within_intertime = (float) cluster_within_intertime/(events_within.size()-1);
-		cluster_outgoing_intertime = (float) cluster_outgoing_intertime/(events_outgoing.size()-1);
+		fraction_active_users.push_back((double)fraction/n_active_users);
+		fraction_active_timestamp.push_back((i+1)*bin_size);
+	}
+}
+
+void CLUSTER::compute_event_intertime(int type) 
+{
+	//type: 0-retweet, 1-mentions, 2-replies, 3-no-type-selected
+	int events_by_type_within = 0;
+	int events_by_type_outgoing = 0;
+	int events_by_type_ingoing = 0;
+	if(size > 24)
+	{
+		//within
+		for(int i=1; i<events_within.size(); i++)
+		{
+			if(type == 3)
+			{
+				cluster_within_intertime += events_within[i]->timestamp - events_within[i-1]->timestamp;
+			}
+			else if(events_within[i]->type == type)
+			{
+				cluster_within_intertime += events_within[i]->timestamp - events_within[i-1]->timestamp;
+				events_by_type_within++;
+			}
+				
+		}
+
+		//outgoing
+		for(int i=1; i<events_outgoing.size(); i++)
+		{
+			if(type==3)
+			{
+				cluster_outgoing_intertime += events_outgoing[i]->timestamp - events_outgoing[i-1]->timestamp;
+			}
+			else if(events_outgoing[i]->type == type)
+			{
+				cluster_outgoing_intertime += events_outgoing[i]->timestamp - events_outgoing[i-1]->timestamp;
+				events_by_type_outgoing++;
+			}
+		}
+
+		//ingoing
+		for(int i=1; i<events_ingoing.size(); i++)
+		{
+			if(type==3)
+			{
+				cluster_ingoing_intertime += events_ingoing[i]->timestamp - events_ingoing[i-1]->timestamp;
+			}
+			else if(events_ingoing[i]->type == type)
+			{
+				cluster_ingoing_intertime += events_ingoing[i]->timestamp - events_ingoing[i-1]->timestamp;
+				events_by_type_ingoing++;
+			}
+		}
+
+		if(type == 3)
+		{
+			cluster_within_intertime = (float) n_active_users*cluster_within_intertime/(events_within.size()-1);
+			cluster_outgoing_intertime = (float) n_active_users*cluster_outgoing_intertime/(events_outgoing.size()-1);
+			cluster_ingoing_intertime = (float) n_active_users*cluster_ingoing_intertime/(events_ingoing.size()-1);
+		}
+		else
+		{
+			cluster_within_intertime = (float) n_active_users*cluster_within_intertime/(events_by_type_within);
+			cluster_outgoing_intertime = (float) n_active_users*cluster_outgoing_intertime/(events_by_type_outgoing);
+			cluster_ingoing_intertime = (float) n_active_users*cluster_ingoing_intertime/(events_by_type_ingoing);
+		}
+			
 	}
 }
 
